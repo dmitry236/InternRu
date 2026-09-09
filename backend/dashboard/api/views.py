@@ -5,10 +5,11 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.shortcuts import get_object_or_404
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.validators import ValidationError
+from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from ..models import JobPost, JobApplication
-from .permissions import IsEmployer, JobPosterOrReadOnly
-from .serializers import JobPostSerializer, JobApplicationSerializer
+from .permissions import IsEmployer, JobPosterOrReadOnly, JobApplicantOnly
+from .serializers import JobPostSerializer, JobApplicationSerializer, JobApplicationSerializerForPoster
 from .pagination import CustomPagination
 from .renderers import CustomRenderer
 
@@ -67,3 +68,40 @@ class ApplyJobView(CreateAPIView):
         serializer.save(job_post=job_post, applicant=self.request.user)
         job_post.no_of_applicants += 1
         job_post.save()    
+
+
+class JobApplicationDetailView(RetrieveUpdateDestroyAPIView):
+    serializer_class = JobApplicationSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [JobApplicantOnly]
+    renderer_classes = [CustomRenderer]
+     
+    
+    def get_object(self):
+        pk = self.kwargs["pk"]
+        obj = get_object_or_404(JobApplication, id=pk)
+        self.check_object_permissions(self.request, obj)
+        return obj 
+    
+    def get_serializer_class(self):
+        current_user = self.request.user
+        serializer_class = self.serializer_class 
+        
+        if self.get_object().job_post.poster == current_user:
+            serializer_class = JobApplicationSerializerForPoster
+            
+        return serializer_class
+    
+
+class JobApplicationListView(ListAPIView):
+    serializer_class = JobApplicationSerializer
+    authentication_classes = [JWTAuthentication]  
+    permission_classes = [IsAuthenticated]
+    filter_backends = [SearchFilter, OrderingFilter, DjangoFilterBackend]
+    filterset_fields = ["job_post__job_title", "review"]
+    ordering_fields = ["applied_on"]
+    pagination_class = CustomPagination 
+    renderer_classes = [CustomRenderer]
+    
+    def get_queryset(self):
+        return JobApplication.objects.filter(applicant=self.request.user).order_by("applied_on")
