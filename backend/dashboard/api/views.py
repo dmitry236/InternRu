@@ -1,11 +1,14 @@
 from datetime import datetime 
-from rest_framework.generics import CreateAPIView, ListAPIView
+from rest_framework.generics import CreateAPIView, ListAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.filters import OrderingFilter, SearchFilter
 from django_filters.rest_framework import DjangoFilterBackend
+from django.shortcuts import get_object_or_404
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.validators import ValidationError
 
-from ..models import JobPost
-from .permissions import IsEmployer
-from .serializers import JobPostSerializer
+from ..models import JobPost, JobApplication
+from .permissions import IsEmployer, JobPosterOrReadOnly
+from .serializers import JobPostSerializer, JobApplicationSerializer
 from .pagination import CustomPagination
 from .renderers import CustomRenderer
 
@@ -29,3 +32,38 @@ class JobPostListView(ListAPIView):
     
     def get_queryset(self):
         return JobPost.objects.filter(deadline__gte=datetime.today().date().strftime('%Y-%m-%d')).order_by("-last_updated")
+
+
+class JobPostDetailView(RetrieveUpdateDestroyAPIView):
+    permission_classes = [JobPosterOrReadOnly]
+    serializer_class = JobPostSerializer
+    lookup_field = "slug"
+    renderer_classes = [CustomRenderer]
+
+    def get_object(self):
+        slug = self.kwargs["slug"]
+        obj = get_object_or_404(JobPost, slug=slug)  
+        self.check_object_permissions(self.request, obj)
+        return obj
+    
+    
+class ApplyJobView(CreateAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = JobApplicationSerializer
+    renderer_classes = [CustomRenderer]
+    
+    def perform_create(self, serializer):
+        slug = self.kwargs["slug"]
+        job_post = JobPost.objects.get(slug=slug)
+        job_application = JobApplication.objects.filter(job_post=job_post, applicant=self.request.user)
+        
+        if job_application.exists():
+            raise ValidationError(
+                                  {
+                                    "status":"Error",
+                                    "data": "You have already applied to this job post!"
+                                  }
+                                )
+        serializer.save(job_post=job_post, applicant=self.request.user)
+        job_post.no_of_applicants += 1
+        job_post.save()    
