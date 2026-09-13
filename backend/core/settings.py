@@ -41,9 +41,9 @@ INSTALLED_APPS = [
     'django_filters',
     'ckeditor',
     'corsheaders',
-    'drf_spectacular',
     'auths',
     'dashboard',
+    'drf_spectacular',
 ]
 
 MIDDLEWARE = [
@@ -66,6 +66,7 @@ TEMPLATES = [
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
+                'django.template.context_processors.debug',
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
@@ -153,3 +154,5 @@ MAILERS = {
         'BACKEND': 'django.core.mail.backends.console.EmailBackend',
     },
 }
+
+AUTH_USER_MODEL = 'auths.CustomUser'
